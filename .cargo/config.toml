@@ -1,0 +1,3 @@
+# `cargo xtask` is the build system for the whole project, on every platform.
+[alias]
+xtask = "run --quiet --package xtask --"

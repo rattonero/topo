@@ -1,0 +1,6 @@
+target/
+apple/Generated/
+apple/RattoneroCore.xcframework/
+apple/Rattonero.xcodeproj/
+.DS_Store
+xcuserdata/

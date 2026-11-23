@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["core", "tools/uniffi-bindgen", "tools/xtask"]
+
+[profile.release]
+lto = "thin"
+opt-level = "s"
+strip = "debuginfo"

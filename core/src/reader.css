@@ -1,0 +1,94 @@
+/* Rattonero reader stylesheet. Loaded after the book's own styles; lays the
+   chapter out as horizontally paged columns and applies the reader's
+   settings, which the front end sets as custom properties on <html>. */
+
+:root {
+  --rn-font-size: 18px;
+  --rn-line-height: 1.5;
+  --rn-margin: 28px;
+  --rn-bg: #ffffff;
+  --rn-fg: #1c1c1e;
+  --rn-link: #0b57d0;
+  /* Never let a line of text grow wider than is comfortable to read. */
+  --rn-hpad: max(var(--rn-margin), calc((100vw - 42rem) / 2));
+  --rn-vpad: max(20px, calc(var(--rn-margin) * 0.8));
+  color-scheme: light;
+}
+:root[data-rn-theme="sepia"] { --rn-bg: #f4ecd8; --rn-fg: #3b2f1e; --rn-link: #8a4b08; }
+:root[data-rn-theme="dark"]  { --rn-bg: #1c1c1e; --rn-fg: #d8d8dc; --rn-link: #8ab4f8; color-scheme: dark; }
+
+html {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: var(--rn-bg) !important;
+  font-size: var(--rn-font-size) !important;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+
+body {
+  box-sizing: border-box !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: var(--rn-vpad) var(--rn-hpad) !important;
+  overflow: visible !important;
+  column-width: calc(100vw - 2 * var(--rn-hpad)) !important;
+  column-gap: calc(2 * var(--rn-hpad)) !important;
+  column-fill: auto !important;
+  background: transparent !important;
+  color: var(--rn-fg) !important;
+  font-family: "Iowan Old Style", "Charter", "Palatino", "Georgia", serif;
+  font-size: 1rem !important;
+  line-height: var(--rn-line-height) !important;
+  text-align: justify;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  overflow-wrap: break-word;
+  orphans: 2;
+  widows: 2;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+}
+
+/* Until the pagination script has placed the page, keep it hidden so the
+   reader never sees a jump. Without the script the content stays visible. */
+html.rn-js body { opacity: 0; }
+html.rn-js.rn-ready body { opacity: 1; transition: opacity 0.18s ease-out; }
+
+body * {
+  color: inherit !important;
+  background-color: transparent !important;
+  line-height: inherit !important;
+  max-width: 100%;
+}
+a, a * { color: var(--rn-link) !important; text-decoration: none; }
+
+h1, h2, h3, h4, h5, h6 {
+  -webkit-hyphens: manual;
+  hyphens: manual;
+  break-after: avoid;
+  break-inside: avoid;
+}
+p { margin: 0; text-indent: 1.2em; }
+h1 + p, h2 + p, h3 + p, h4 + p, hr + p, p:first-child { text-indent: 0; }
+
+img, svg, video {
+  max-width: 100% !important;
+  max-height: calc(100vh - 2 * var(--rn-vpad)) !important;
+  height: auto;
+  object-fit: contain;
+  break-inside: avoid;
+}
+img { cursor: zoom-in; }
+:root[data-rn-theme="dark"] img { filter: brightness(0.85); }
+figure, table, pre, blockquote { break-inside: avoid; margin-left: 0; margin-right: 0; }
+pre { white-space: pre-wrap; text-align: start; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid color-mix(in srgb, var(--rn-fg) 30%, transparent); padding: 0.2em 0.5em; }
+hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--rn-fg) 30%, transparent); margin: 1.5em 20%; }
+::selection { background: color-mix(in srgb, var(--rn-link) 35%, transparent); }
