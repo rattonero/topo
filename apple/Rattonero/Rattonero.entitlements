@@ -2,7 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Sandboxed, with read-only access to the folder the user picks.
+	<!-- Sandboxed, with access only to the folder the user picks. It is
+	     read-write so reading progress can be shared through the hidden
+	     .rattonero directory there; nothing else in the folder is written.
 	     WebKit's helper processes do not start in a sandboxed app without the
 	     network client entitlement, so it is granted; book content is kept
 	     offline by the reader itself (content policy, content blocker, no
@@ -11,7 +13,7 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<key>com.apple.security.files.user-selected.read-only</key>
+	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>

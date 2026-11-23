@@ -8,7 +8,7 @@
 //! * scanning a folder for EPUB and PDF files and reading their metadata,
 //! * arranging books on shelves the way a library would,
 //! * opening EPUBs and serving their content, sanitised, to a web view,
-//! * remembering reading positions.
+//! * remembering reading progress and sharing it between devices.
 //!
 //! Book files are untrusted input. All parsing happens here, in safe Rust,
 //! with size limits; chapter markup is rebuilt from an allow-list before any

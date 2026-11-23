@@ -32,13 +32,22 @@ Needs Rust everywhere. On a Mac also Xcode,
 `aarch64-apple-darwin`, `aarch64-apple-ios`, `aarch64-apple-ios-sim`
 (plus `x86_64-apple-darwin` for `--release`).
 
+To run on your own iPhone or iPad, put your Apple development team in
+`apple/Local.xcconfig` (not in git; see `apple/Signing.xcconfig`):
+
+```
+DEVELOPMENT_TEAM = ABCDE12345
+```
+
+Without that file everything above still builds; only device signing needs it.
+
 `cargo xtask test` runs only the core's tests. To run or debug the apps, open
 `apple/Rattonero.xcodeproj` after a build. `tools/make-samples.py <folder>`
 writes a few made-up books to try things out.
 
 ## How it fits together
 
-* **Bookshelf.** `Library::scan` walks the chosen folder (read-only) for
+* **Bookshelf.** `Library::scan` walks the chosen folder for
   `.epub` and `.pdf`, reads metadata with a cache, and `arrange` orders the
   books by author, title, publisher or year the way a library would: surnames
   first, leading articles ignored, accents folded.
@@ -51,6 +60,16 @@ writes a few made-up books to try things out.
 * **Reading PDFs.** The core supplies metadata and remembers the page; the
   platform renders (PDFKit on Apple systems).
 
+## Shared reading progress
+
+Progress is shared between devices through the library folder itself, in the
+hidden directory `.rattonero`. Each device writes only its own file,
+`reading-<device>.json`, and reads all the others; per book, the most recent
+entry wins. Since no two devices write the same file, a file synchroniser
+never sees a conflict. If the folder is read-only, progress stays on the
+device. `Library::continue_reading` turns this into the "Continue reading"
+shelf: books started and not finished, most recently read first.
+
 ## Safety
 
 Book files are untrusted input.
@@ -62,7 +81,8 @@ Book files are untrusted input.
   book's own resources. The Apple app also disables JavaScript for content,
   installs a content blocker for all other URLs, refuses navigations it did
   not start, and uses a non-persistent web data store.
-* The Mac app is sandboxed with read-only access to the folder you pick.
+* The Mac app is sandboxed with access only to the folder you pick. Books
+  are never modified; the only thing written there is reading progress.
 
 ## Porting to another toolkit
 

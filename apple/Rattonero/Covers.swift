@@ -64,9 +64,13 @@ actor CoverLoader {
 struct BookCoverView: View {
     let book: BookInfo
     let library: Library?
+    /// Covers shrink on narrow screens so a shelf always holds three books.
+    var width: CGFloat = BookCoverView.fullWidth
     @State private var cover: CGImage?
 
-    static let size = CGSize(width: 112, height: 164)
+    static let fullWidth: CGFloat = 112
+    private var size: CGSize { CGSize(width: width, height: (width * 164 / 112).rounded()) }
+    private var scale: CGFloat { width / Self.fullWidth }
 
     var body: some View {
         Group {
@@ -86,7 +90,7 @@ struct BookCoverView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 3))
         }
         .shadow(color: .black.opacity(0.35), radius: 3, x: 2, y: 1)
-        .frame(width: Self.size.width, height: Self.size.height, alignment: .bottom)
+        .frame(width: size.width, height: size.height, alignment: .bottom)
         .task(id: book.path) {
             guard let library else { return }
             cover = await CoverLoader.shared.cover(for: book, in: library)
@@ -100,18 +104,18 @@ struct BookCoverView: View {
             Color(hue: hue, saturation: 0.42, brightness: 0.46)
             VStack(spacing: 6) {
                 Text(book.title)
-                    .font(.system(size: 13, weight: .semibold, design: .serif))
+                    .font(.system(size: 13 * scale, weight: .semibold, design: .serif))
                     .lineLimit(5)
                 Rectangle().frame(width: 24, height: 1).opacity(0.6)
                 Text(book.authorLine)
-                    .font(.system(size: 10, design: .serif))
+                    .font(.system(size: 10 * scale, design: .serif))
                     .lineLimit(2)
                     .opacity(0.85)
             }
             .multilineTextAlignment(.center)
             .foregroundStyle(.white)
-            .padding(10)
+            .padding(10 * scale)
         }
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(width: size.width, height: size.height)
     }
 }

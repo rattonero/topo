@@ -21,6 +21,10 @@ final class LibraryStore {
     private(set) var folderURL: URL?
     private(set) var library: Library?
     private(set) var shelves: [Shelf] = []
+    /// Books in progress, most recently read first.
+    private(set) var continueReading: [BookInfo] = []
+    /// False when the folder is read-only and progress stays on this device.
+    private(set) var sharesProgress = true
     private(set) var bookCount = 0
     private(set) var isScanning = false
     /// Bumped when reading positions change, so progress marks redraw.
@@ -56,18 +60,44 @@ final class LibraryStore {
     func refresh() async {
         guard let library, !isScanning else { return }
         isScanning = true
-        let found = await Task.detached(priority: .userInitiated) { library.scan() }.value
+        let found = await Task.detached(priority: .userInitiated) {
+            library.reloadProgress()
+            return library.scan()
+        }.value
         // The folder may have been switched while the scan ran.
         if library === self.library {
             books = found
             bookCount = found.count
             shelves = arrange(books: found, order: order)
+            progressChanged()
         }
         isScanning = false
     }
 
-    func positionsChanged() {
+    /// Reading progress changed here: redraw marks and the top shelf.
+    func progressChanged() {
         positionsRevision += 1
+        continueReading = library?.continueReading(books: books, limit: 12) ?? []
+        sharesProgress = library?.sharesProgress() ?? true
+    }
+
+    /// A book was closed, or the app is leaving the foreground: make sure
+    /// other devices can see where we are.
+    func shareProgress() {
+        library?.flush()
+        progressChanged()
+    }
+
+    /// Pick up what other devices have read since we last looked.
+    func reloadProgress() async {
+        guard let library else { return }
+        await Task.detached { library.reloadProgress() }.value
+        if library === self.library { progressChanged() }
+    }
+
+    func dismissFromContinueReading(_ book: BookInfo) {
+        library?.dismissFromContinueReading(bookId: book.id)
+        progressChanged()
     }
 
     func progress(of book: BookInfo) -> Double? {
@@ -119,6 +149,7 @@ final class LibraryStore {
             }
             books = []
             shelves = []
+            continueReading = []
             bookCount = 0
             Task { await refresh() }
         } catch {
@@ -127,7 +158,7 @@ final class LibraryStore {
     }
 
     #if os(macOS)
-    private static let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope, .securityScopeAllowOnlyReadAccess]
+    private static let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
     private static let resolveOptions: URL.BookmarkResolutionOptions = [.withSecurityScope]
     #else
     private static let bookmarkOptions: URL.BookmarkCreationOptions = []

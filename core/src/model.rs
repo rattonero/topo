@@ -65,4 +65,6 @@ pub struct ReadingPosition {
     pub fraction: f64,
     /// 0.0 ..= 1.0 through the whole book, for display on the shelf.
     pub progress: f64,
+    /// The reader is on the last page.
+    pub finished: bool,
 }

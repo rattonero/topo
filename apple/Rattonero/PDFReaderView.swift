@@ -65,7 +65,7 @@ struct PDFReaderView: View {
         .onChange(of: pageIndex) { _, index in
             guard let document else { return }
             let progress = Double(index + 1) / Double(document.pageCount)
-            store.library?.setPosition(bookId: book.id, position: ReadingPosition(index: UInt32(index), fraction: 0, progress: progress))
+            store.library?.setPosition(bookId: book.id, position: ReadingPosition(index: UInt32(index), fraction: 0, progress: progress, finished: index >= document.pageCount - 1))
         }
     }
 }

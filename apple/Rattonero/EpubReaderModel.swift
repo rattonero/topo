@@ -178,7 +178,7 @@ final class EpubReaderModel: NSObject, WKNavigationDelegate {
 
     private func savePosition() {
         let fraction = Double(page) / Double(max(pages, 1))
-        library?.setPosition(bookId: info.id, position: ReadingPosition(index: UInt32(spineIndex), fraction: fraction, progress: progress))
+        library?.setPosition(bookId: info.id, position: ReadingPosition(index: UInt32(spineIndex), fraction: fraction, progress: progress, finished: spineIndex == spineCount - 1 && page >= pages - 1))
     }
 
     // MARK: - Messages from the pagination script

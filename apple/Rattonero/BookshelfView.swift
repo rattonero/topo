@@ -6,6 +6,7 @@ struct BookshelfView: View {
     @Environment(LibraryStore.self) private var store
     @State private var openBook: BookInfo?
     @State private var choosingFolder = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var store = store
@@ -28,7 +29,14 @@ struct BookshelfView: View {
         }
         #endif
         .onChange(of: openBook) { _, book in
-            if book == nil { store.positionsChanged() }
+            if book == nil { store.shareProgress() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: Task { await store.reloadProgress() }
+            case .background: store.shareProgress()
+            default: break
+            }
         }
         .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { store.chooseFolder(url) }
@@ -61,7 +69,7 @@ struct BookshelfView: View {
             ContentUnavailableView {
                 Label("Choose your library folder", systemImage: "books.vertical")
             } description: {
-                Text("Rattonero Books shows every EPUB and PDF in a folder you pick, such as one shared through iCloud Drive or a network disk. It only ever reads from it.")
+                Text("Rattonero Books shows every EPUB and PDF in a folder you pick, such as one shared through iCloud Drive or a network disk. Your books are never changed; reading progress is kept in a small hidden folder beside them so your other devices can pick up where you left off.")
             } actions: {
                 Button("Choose Folder…") { choosingFolder = true }
                     .buttonStyle(.borderedProminent)
@@ -82,11 +90,18 @@ struct BookshelfView: View {
             }
         } else {
             GeometryReader { proxy in
-                let columns = max(2, Int((proxy.size.width - 24) / 132))
+                // At least three books to a shelf, on any screen; covers
+                // shrink to fit when the screen is narrow.
+                let columns = max(3, Int((proxy.size.width - 24) / 132))
+                let coverWidth = min(BookCoverView.fullWidth, (proxy.size.width - 24) / CGFloat(columns) - 14)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        if !store.continueReading.isEmpty {
+                            // One shelf of books in progress, newest first.
+                            ShelfRow(places: continuePlaces(columns: columns), columns: columns, coverWidth: coverWidth, dismiss: store.dismissFromContinueReading) { openBook = $0 }
+                        }
                         ForEach(rows(columns: columns), id: \.first?.book.id) { row in
-                            ShelfRow(places: row, columns: columns) { openBook = $0 }
+                            ShelfRow(places: row, columns: columns, coverWidth: coverWidth) { openBook = $0 }
                         }
                     }
                     .padding(.bottom, 24)
@@ -104,6 +119,12 @@ struct BookshelfView: View {
             shelf.books.enumerated().map { ShelfPlace(book: $1, label: $0 == 0 ? shelf.label : nil) }
         }
         return stride(from: 0, to: places.count, by: columns).map { Array(places[$0..<min($0 + columns, places.count)]) }
+    }
+
+    private func continuePlaces(columns: Int) -> [ShelfPlace] {
+        store.continueReading.prefix(columns).enumerated().map {
+            ShelfPlace(book: $1, label: $0 == 0 ? "Continue reading" : nil)
+        }
     }
 
     @ToolbarContentBuilder
@@ -129,6 +150,9 @@ struct BookshelfView: View {
                 if let folder = store.folderURL {
                     Divider()
                     Text(folder.path(percentEncoded: false))
+                    if !store.sharesProgress {
+                        Text("Reading progress stays on this device. Choose the folder again to share it.")
+                    }
                 }
             } label: {
                 Label("Library", systemImage: "folder")
@@ -157,6 +181,7 @@ private struct ShelfLabel: View {
             .font(.system(.caption, design: .serif).weight(.semibold))
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(.quaternary.opacity(text == nil ? 0 : 1), in: Capsule())
@@ -171,6 +196,9 @@ private struct ShelfRow: View {
     @Environment(LibraryStore.self) private var store
     let places: [ShelfPlace]
     let columns: Int
+    let coverWidth: CGFloat
+    /// Set on the "continue reading" shelf: offers to take a book off it.
+    var dismiss: ((BookInfo) -> Void)?
     let open: (BookInfo) -> Void
 
     var body: some View {
@@ -181,7 +209,7 @@ private struct ShelfRow: View {
                     VStack(spacing: 0) {
                         ShelfLabel(text: place.label)
                         Button { open(book) } label: {
-                            BookCoverView(book: book, library: store.library)
+                            BookCoverView(book: book, library: store.library, width: coverWidth)
                                 .overlay(alignment: .topTrailing) {
                                     if book.format == .pdf { badge("PDF") }
                                 }
@@ -189,6 +217,11 @@ private struct ShelfRow: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(book.title), \(book.authorLine)")
                         .help(tooltip(for: book))
+                        .contextMenu {
+                            if let dismiss {
+                                Button("Remove from Continue Reading", systemImage: "minus.circle") { dismiss(book) }
+                            }
+                        }
                     }
                 }
             }
@@ -203,7 +236,7 @@ private struct ShelfRow: View {
                         if let progress = store.progress(of: book), progress > 0.005 {
                             ProgressView(value: min(progress, 1))
                                 .tint(.secondary)
-                                .frame(width: 70)
+                                .frame(width: coverWidth * 0.62)
                                 .scaleEffect(y: 0.6)
                         }
                         Text(book.title)
