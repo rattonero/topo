@@ -4,3 +4,5 @@ apple/RattoneroCore.xcframework/
 apple/Rattonero.xcodeproj/
 .DS_Store
 xcuserdata/
+# Private signing settings (see apple/Signing.xcconfig)
+apple/Local.xcconfig

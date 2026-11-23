@@ -16,6 +16,9 @@ targets:
     sources:
       - path: Rattonero
       - path: Generated/RattoneroCore.swift
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
     dependencies:
       - framework: RattoneroCore.xcframework
         embed: false

@@ -1,0 +1,11 @@
+// Signing settings shared by every configuration.
+//
+// Private, per-developer values live in Local.xcconfig, next to this file.
+// That file is not in git and is optional: without it the Mac and simulator
+// apps still build; only running on a real device needs a team.
+//
+// To sign for your own devices, create apple/Local.xcconfig containing:
+//
+//     DEVELOPMENT_TEAM = ABCDE12345
+//
+#include? "Local.xcconfig"
