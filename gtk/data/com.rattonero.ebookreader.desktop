@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Rattonero Books
+GenericName=Book Reader
+Comment=Read the EPUB and PDF books in a folder of your own
+Exec=rattonero-books
+Icon=com.rattonero.ebookreader
+Terminal=false
+Categories=Office;Viewer;GTK;GNOME;
+Keywords=ebook;epub;pdf;reader;library;bookshelf;
+StartupNotify=true

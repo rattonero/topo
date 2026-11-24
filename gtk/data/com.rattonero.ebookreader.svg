@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs><filter id="b" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="10"/></filter></defs><rect x="100" y="110" width="824" height="824" rx="185.4" fill="#000" opacity=".3" filter="url(#b)"/><rect x="100" y="100" width="824" height="824" rx="185.4" fill="#F2B441"/><g transform="translate(100 100) scale(0.804688)"><g transform="translate(512 512) scale(1.12) translate(-512 -642)">
+<path d="M 170 480 L 512 500 L 854 480 L 854 810 C 724 785, 584 790, 512 830 C 440 790, 300 785, 170 810 Z" fill="#8A4B12"></path>
+<path d="M 512 500 C 440 460, 300 455, 190 480 L 190 790 C 300 765, 440 770, 512 810 Z" fill="#FFF8E7"></path>
+<path d="M 512 500 C 584 460, 724 455, 834 480 L 834 790 C 724 765, 584 770, 512 810 Z" fill="#FFF8E7"></path>
+<path d="M 512 500 L 512 810" fill="none" stroke="#8A4B12" stroke-width="8" stroke-linecap="round"></path>
+<g fill="none" stroke="#DCCFAE" stroke-width="16" stroke-linecap="round">
+<path d="M 246 548 L 456 561"></path>
+<path d="M 246 600 L 456 613"></path>
+<path d="M 246 652 L 456 665"></path>
+<path d="M 246 704 L 380 712"></path>
+</g>
+<g transform="translate(680 620) rotate(-3.5) scale(8.8) translate(-94.2 -47.5)">
+<path d="M 82.8 51.2 C 84.5 48.5, 86.5 46.2, 89 45.6 C 91.5 43.6, 94.5 42.8, 97 43.4 C 100.8 44.3, 102.6 47.8, 102 51 C 101.8 52.2, 101.2 53, 100.2 53 L 86 53 C 84.5 53, 83.2 52.2, 82.8 51.2 Z" fill="#17171A"></path>
+<circle cx="89.6" cy="44.6" r="2.5" fill="#17171A"></circle>
+<path d="M 100.5 52.3 C 104.5 52.6, 105.6 49, 104.2 46.2" fill="none" stroke="#17171A" stroke-width="1.4" stroke-linecap="round"></path>
+</g>
+</g></g></svg>

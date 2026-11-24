@@ -1,0 +1,21 @@
+[package]
+name = "rattonero-gtk"
+version = "0.1.0"
+edition = "2021"
+description = "GTK4 and libadwaita front end of Rattonero Books."
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "rattonero-books"
+path = "src/main.rs"
+
+[dependencies]
+rattonero-core = { path = "../core" }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_8"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+webkit = { package = "webkit6", version = "0.6", features = ["v2_42"] }
+poppler = { package = "poppler-rs", version = "0.26" }
+percent-encoding = "2.3.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

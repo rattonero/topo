@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["core", "tools/uniffi-bindgen", "tools/xtask"]
+members = ["core", "gtk", "tools/uniffi-bindgen", "tools/xtask"]
+# The GTK front end needs GTK, libadwaita, WebKitGTK and Poppler; build it on
+# purpose (`cargo xtask build` on Linux, or the Flatpak).
+default-members = ["core", "tools/uniffi-bindgen", "tools/xtask"]
 
 [profile.release]
 lto = "thin"

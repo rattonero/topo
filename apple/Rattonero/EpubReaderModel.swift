@@ -48,6 +48,20 @@ final class EpubReaderModel: NSObject, WKNavigationDelegate {
     @ObservationIgnored private let library: Library?
     @ObservationIgnored private let spineCount: Int
     @ObservationIgnored private var settingsJSON = "{}"
+    /// Where the chapter being opened has got to. Until it reports its first
+    /// page, messages still queued from the chapter we left are stale: acting
+    /// on their "turned past the chapter" would skip whole chapters, and their
+    /// positions belong to the old chapter.
+    @ObservationIgnored private var loading = Loading.shown
+
+    private enum Loading {
+        /// A chapter was asked for; the old one may still be talking.
+        case requested
+        /// The new chapter replaced the old one but has not laid out yet.
+        case committed
+        /// The chapter reported its page: everything it says counts.
+        case shown
+    }
     @ObservationIgnored private let bridge = Bridge()
     @ObservationIgnored var openExternal: (URL) -> Void = { _ in }
 
@@ -157,6 +171,7 @@ final class EpubReaderModel: NSObject, WKNavigationDelegate {
         components.host = "book"
         components.path = "/" + path
         if let url = components.url {
+            loading = .requested
             webView.load(URLRequest(url: url))
         }
     }
@@ -185,12 +200,15 @@ final class EpubReaderModel: NSObject, WKNavigationDelegate {
 
     fileprivate func receive(_ body: Any) {
         guard let message = body as? [String: Any], let type = message["type"] as? String else { return }
+        if loading == .requested { return }
         switch type {
         case "position":
+            loading = .shown
             page = (message["page"] as? NSNumber)?.intValue ?? 0
             pages = max(1, (message["pages"] as? NSNumber)?.intValue ?? 1)
             savePosition()
         case "edge":
+            guard loading == .shown else { return }
             if message["direction"] as? String == "next" {
                 load(spineIndex + 1, at: .fraction(0))
             } else {
@@ -252,6 +270,11 @@ final class EpubReaderModel: NSObject, WKNavigationDelegate {
         // Only chapters we load ourselves; never a navigation the content asks for.
         let ours = action.request.url?.scheme == Self.scheme && action.navigationType == .other
         return ours && action.targetFrame?.isMainFrame == true ? .allow : .cancel
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // From here on, messages come from the new chapter.
+        if loading == .requested { loading = .committed }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

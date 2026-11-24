@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.rattonero.ebookreader</id>
+  <name>Rattonero Books</name>
+  <summary>Read the EPUB and PDF books in a folder of your own</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <developer id="com.rattonero">
+    <name>Mirko Maischberger</name>
+  </developer>
+  <description>
+    <p>
+      Rattonero Books shows every EPUB and PDF in a folder you pick, on
+      shelves ordered by author, title, publisher or year the way a library
+      would. Books are paginated like printed pages, with a choice of theme,
+      text size, margins and line spacing.
+    </p>
+    <p>
+      Your books are never changed. Reading progress is kept in a small
+      hidden folder beside them, so when the folder is shared between your
+      computers and phones, each one picks up where you left off.
+    </p>
+    <p>
+      Book files are treated as untrusted: they are parsed in safe Rust,
+      cleaned of scripts and forms, and shown without any network access.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.rattonero.ebookreader.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <releases>
+    <release version="0.1.0" date="2026-11-24"/>
+  </releases>
+</component>

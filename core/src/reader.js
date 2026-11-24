@@ -97,11 +97,13 @@
     R.apply(settings);
   };
   R.next = function () {
+    if (!ready) return;   // not laid out: keep where it opens
     start = null;
     if (R.page < R.pages - 1) { R.page++; show(true); }
     else { show(true); post({ type: 'edge', direction: 'next' }); }
   };
   R.prev = function () {
+    if (!ready) return;   // not laid out: keep where it opens
     start = null;
     if (R.page > 0) { R.page--; show(true); }
     else { show(true); post({ type: 'edge', direction: 'prev' }); }

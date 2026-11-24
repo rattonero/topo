@@ -1,0 +1,61 @@
+/* Rattonero Books: the bookshelf and the reader's surroundings.
+   Colours follow the Apple app's asset catalogue. */
+
+.shelf-wall, .shelf-wall > listview { background-color: #f3eee4; }
+listview.shelf-list > row,
+listview.shelf-list > row:hover,
+listview.shelf-list > row:selected { background: none; padding: 0; }
+
+.shelf-label {
+  font-family: serif;
+  font-size: 0.82em;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: alpha(currentColor, 0.08);
+  color: alpha(currentColor, 0.65);
+}
+
+.board-top { background-color: #b98b5e; min-height: 5px; }
+.board-front { background-color: #8f6238; min-height: 9px; box-shadow: 0 4px 4px -1px rgba(0, 0, 0, 0.25); }
+
+button.cover-button,
+button.cover-button:hover,
+button.cover-button:active { padding: 0; background: none; box-shadow: none; min-height: 0; min-width: 0; }
+button.cover-button:hover .cover { box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.45); }
+.cover { border-radius: 3px; box-shadow: 2px 1px 3px rgba(0, 0, 0, 0.35); }
+.spine { min-width: 5px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0.28), transparent); }
+.badge {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: rgba(0, 0, 0, 0.65);
+  color: white;
+}
+.cloth-title { font-family: serif; color: white; }
+.cloth-author { font-family: serif; color: rgba(255, 255, 255, 0.85); }
+.cloth-rule { background-color: rgba(255, 255, 255, 0.6); }
+
+.book-title { font-size: 0.85em; font-weight: 500; }
+.book-author { font-size: 0.75em; }
+progressbar.shelf-progress > trough,
+progressbar.shelf-progress > trough > progress,
+progressbar.reader-progress > trough,
+progressbar.reader-progress > trough > progress { min-height: 2px; }
+progressbar.shelf-progress > trough > progress,
+progressbar.reader-progress > trough > progress { background-color: alpha(currentColor, 0.45); }
+
+/* The page colours; keep in sync with core/src/reader.css. */
+.reader-surface.reader-light { background-color: #ffffff; color: #1c1c1e; }
+.reader-surface.reader-sepia { background-color: #f4ecd8; color: #3b2f1e; }
+.reader-surface.reader-dark { background-color: #1c1c1e; color: #d8d8dc; }
+.reader-footer { font-size: 0.82em; }
+.lookup-bar { padding: 6px 8px 6px 14px; border-radius: 999px; }
+
+.pdf-canvas { background-color: alpha(currentColor, 0.06); }
+
+/* Dark mode; the window carries .dark while libadwaita is dark. */
+window.dark .shelf-wall, window.dark .shelf-wall > listview { background-color: #1e1b18; }
+window.dark .board-top { background-color: #6b4a2e; }
+window.dark .board-front { background-color: #4a311d; }
