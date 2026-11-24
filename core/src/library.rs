@@ -42,14 +42,32 @@ struct Entry {
     dismissed: bool,
     #[serde(default)]
     updated: u64,
+    /// Time spent with the book open and pages turning, in seconds. Absent
+    /// in entries written before this was tracked; those count as read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    seconds_read: Option<u32>,
 }
 
 impl Entry {
     fn position(&self) -> ReadingPosition {
         ReadingPosition { index: self.index, fraction: self.fraction, progress: self.progress, finished: self.finished }
     }
+    /// Whether this entry should replace `other` for the same book. Every
+    /// device applies the same rule, so they all settle on the same entry:
+    /// the most recent, and between equally old ones (entries from before
+    /// times were recorded) the one further into the book.
+    fn supersedes(&self, other: &Entry) -> bool {
+        (self.updated, self.progress) > (other.updated, other.progress)
+    }
     fn started(&self) -> bool {
         self.index > 0 || self.fraction > 0.0
+    }
+    /// Open long enough to have read a few pages, not just leafed through.
+    fn really_read(&self) -> bool {
+        self.seconds_read.map_or(true, |s| s >= MIN_READING_SECONDS)
+    }
+    fn add_time(&mut self, seconds: u32) {
+        self.seconds_read = self.seconds_read.map(|s| s.saturating_add(seconds));
     }
 }
 
@@ -68,14 +86,25 @@ struct Progress {
     others: HashMap<String, Entry>,
     /// `own` has changes not yet written to the shared folder.
     unshared: bool,
-    last_shared_write: Option<Instant>,
     shared_ok: bool,
+    last_shared_write: Option<Instant>,
+    /// The book being read right now and when its time was last counted.
+    session: Option<(String, Instant)>,
 }
 
 impl Progress {
+    /// Seconds since the clock was last read for `book_id`, capped; zero if
+    /// another book, or none, is being read.
+    fn take_session_time(&self, book_id: &str) -> u32 {
+        match &self.session {
+            Some((id, since)) if id == book_id => since.elapsed().as_secs().min(MAX_PAGE_SECONDS) as u32,
+            _ => 0,
+        }
+    }
+
     fn latest(&self, book_id: &str) -> Option<Entry> {
         match (self.own.get(book_id), self.others.get(book_id)) {
-            (Some(a), Some(b)) => Some(if b.updated > a.updated { *b } else { *a }),
+            (Some(a), Some(b)) => Some(if b.supersedes(a) { *b } else { *a }),
             (a, b) => a.or(b).copied(),
         }
     }
@@ -100,11 +129,18 @@ pub struct Library {
 
 const SHARED_DIR: &str = ".rattonero";
 const SHARED_VERSION: u32 = 1;
-/// Sync services dislike a file rewritten on every page turn.
-const SHARED_WRITE_INTERVAL: Duration = Duration::from_secs(5);
 /// Files written by other devices are untrusted input too.
 const MAX_SHARED_FILE: u64 = 8 << 20;
 const MAX_SHARED_FILES: usize = 64;
+/// Leafing quickly through pages is shared as one write, not ten; whatever
+/// is held back goes out at the next `reload_progress` or `flush`.
+const SHARED_WRITE_INTERVAL: Duration = Duration::from_secs(1);
+/// A book joins "continue reading" once it has been read for this long:
+/// about the time a few pages take.
+const MIN_READING_SECONDS: u32 = 120;
+/// A longer pause between page turns is a break, not reading; only this
+/// much of it counts.
+const MAX_PAGE_SECONDS: u64 = 300;
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
@@ -217,12 +253,10 @@ impl Library {
         let device = device_id(&state_dir);
         let progress = Progress {
             own: load_json(&state_dir.join("positions.json")),
-            // Creating the directory is also the first test of whether the
-            // folder is writable; a failed write later corrects this.
-            shared_ok: fs::create_dir_all(root.join(SHARED_DIR)).is_ok(),
             ..Progress::default()
         };
         let library = Library { root, state_dir, device, progress: Mutex::new(progress) };
+        library.publish_if_needed();
         library.reload_progress();
         Ok(Arc::new(library))
     }
@@ -276,13 +310,24 @@ impl Library {
         self.lock().latest(&book_id).map(|e| e.position())
     }
 
-    /// Record where the reader is. Cheap enough to call on every page turn:
-    /// the shared file is written at most every few seconds (see `flush`).
+    /// Record where the reader is; call it when a book opens and on every
+    /// page turn. The time between calls is counted as reading time. A
+    /// change is written to the shared folder at once, unless one was
+    /// written within the last second; then it follows at the next
+    /// `reload_progress`. Other devices so follow page by page.
     pub fn set_position(&self, book_id: String, position: ReadingPosition) {
         let mut progress = self.lock();
-        if progress.latest(&book_id).is_some_and(|e| e.position() == position && !e.dismissed) {
+        let known = progress.latest(&book_id);
+        let reading = matches!(&progress.session, Some((id, _)) if *id == book_id);
+        if known.is_some_and(|e| e.position() == position && !e.dismissed) {
+            if !reading {
+                // The book was just opened where it was left: start the clock.
+                progress.session = Some((book_id, Instant::now()));
+            }
             return;
         }
+        let seconds = progress.take_session_time(&book_id);
+        progress.session = Some((book_id.clone(), Instant::now()));
         let entry = Entry {
             index: position.index,
             fraction: position.fraction,
@@ -290,13 +335,20 @@ impl Library {
             finished: position.finished,
             dismissed: false,
             updated: now_ms(),
+            // A book first seen here starts counting from zero; one with an
+            // older, untimed entry stays "read".
+            seconds_read: match known {
+                Some(e) => e.seconds_read.map(|s| s.saturating_add(seconds)),
+                None => Some(seconds),
+            },
         };
         progress.own.insert(book_id, entry);
         self.save(&mut progress, false);
     }
 
-    /// The books to offer under "continue reading": started, not finished,
-    /// not dismissed, most recently read first. `books` is the result of
+    /// The books to offer under "continue reading": actually read for a
+    /// couple of minutes (not merely opened or leafed through), not
+    /// finished, not dismissed, most recently read first. `books` is the result of
     /// `scan`, so books no longer in the folder never show up.
     pub fn continue_reading(&self, books: Vec<BookInfo>, limit: u32) -> Vec<BookInfo> {
         let progress = self.lock();
@@ -304,7 +356,7 @@ impl Library {
             .into_iter()
             .filter_map(|book| {
                 let entry = progress.latest(&book.id)?;
-                (entry.started() && !entry.finished && !entry.dismissed).then_some((entry.updated, book))
+                (entry.started() && entry.really_read() && !entry.finished && !entry.dismissed).then_some((entry.updated, book))
             })
             .collect();
         reading.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
@@ -322,9 +374,17 @@ impl Library {
         self.save(&mut progress, true);
     }
 
-    /// Read what other devices have written since the last call. Call it
-    /// when the library is shown or refreshed.
-    pub fn reload_progress(&self) {
+    /// Exchange progress with the other devices: write anything of ours
+    /// still held back, read what they have written since the last call,
+    /// and say whether that changed anything. Call it every few seconds
+    /// while the app is in front; it is cheap.
+    pub fn reload_progress(&self) -> bool {
+        {
+            let mut progress = self.lock();
+            if progress.unshared {
+                self.save(&mut progress, true);
+            }
+        }
         let mut others: HashMap<String, Entry> = HashMap::new();
         let own_name = self.shared_file_name();
         let mut files: Vec<PathBuf> = fs::read_dir(self.root.join(SHARED_DIR))
@@ -341,19 +401,34 @@ impl Library {
             }
             let file: SharedFile = load_json(&path);
             for (book_id, entry) in file.entries {
-                let newer = others.get(&book_id).map_or(true, |known| entry.updated > known.updated);
+                let newer = others.get(&book_id).map_or(true, |known| entry.supersedes(known));
                 if newer && entry.fraction.is_finite() && entry.progress.is_finite() {
                     others.insert(book_id, entry);
                 }
             }
         }
-        self.lock().others = others;
+        let mut progress = self.lock();
+        let changed = progress.others != others;
+        progress.others = others;
+        changed
     }
 
-    /// Write any progress not yet in the shared folder. Call it when a book
-    /// is closed and when the app goes to the background.
+    /// Count the time spent on the page that is open and retry any write to
+    /// the shared folder that failed. Call it when a book is closed and
+    /// when the app goes to the background.
     pub fn flush(&self) {
         let mut progress = self.lock();
+        // Count the time spent on the page that was open, and stop the clock.
+        if let Some((book_id, _)) = progress.session.clone() {
+            let seconds = progress.take_session_time(&book_id);
+            progress.session = None;
+            if let Some(mut entry) = progress.latest(&book_id).filter(|_| seconds > 0) {
+                entry.add_time(seconds);
+                progress.own.insert(book_id, entry);
+                progress.unshared = true;
+                let _ = save_json(&self.state_dir.join("positions.json"), &progress.own);
+            }
+        }
         if progress.unshared {
             self.save(&mut progress, true);
         }
@@ -375,22 +450,49 @@ impl Library {
         format!("reading-{}.json", self.device)
     }
 
-    /// Always keeps the private copy current; writes the shared file when
-    /// `now` is set or enough time has passed since the last write.
+    /// On opening a folder, make sure this device's file is there and up to
+    /// date. This publishes progress made while the folder was read-only,
+    /// and finds out straight away whether the folder can be written.
+    fn publish_if_needed(&self) {
+        let mut progress = self.lock();
+        let path = self.root.join(SHARED_DIR).join(self.shared_file_name());
+        let published: Option<SharedFile> = fs::read(&path).ok().and_then(|data| serde_json::from_slice(&data).ok());
+        if published.is_some_and(|file| file.entries == progress.own) {
+            progress.shared_ok = true;
+        } else {
+            self.save(&mut progress, true);
+        }
+    }
+
+    /// Writes this device's progress to the private copy and, unless a
+    /// write just happened and `now` is not set, to the shared folder.
     fn save(&self, progress: &mut Progress, now: bool) {
         let _ = save_json(&self.state_dir.join("positions.json"), &progress.own);
         progress.unshared = true;
-        let due = progress.last_shared_write.map_or(true, |at| at.elapsed() >= SHARED_WRITE_INTERVAL);
-        if !(now || due) {
+        if !now && progress.last_shared_write.is_some_and(|at| at.elapsed() < SHARED_WRITE_INTERVAL) {
             return;
         }
         let dir = self.root.join(SHARED_DIR);
         let file = SharedFile { version: SHARED_VERSION, device: self.device.clone(), entries: progress.own.clone() };
         let written = fs::create_dir_all(&dir).is_ok() && save_json(&dir.join(self.shared_file_name()), &file).is_ok();
         progress.shared_ok = written;
-        progress.last_shared_write = Some(Instant::now());
-        if written {
-            progress.unshared = false;
+        progress.unshared = !written;
+        if !now {
+            // Only page turns start the quiet second; an explicit exchange
+            // must not delay the turn that follows it.
+            progress.last_shared_write = Some(Instant::now());
+        }
+    }
+
+    /// Pretend the current page has been open for `seconds`.
+    #[cfg(test)]
+    fn age_session(&self, seconds: u64) {
+        let mut progress = self.lock();
+        if let Some((_, since)) = &mut progress.session {
+            *since -= Duration::from_secs(seconds);
+        }
+        if let Some(at) = &mut progress.last_shared_write {
+            *at -= Duration::from_secs(seconds);
         }
     }
 
@@ -447,6 +549,14 @@ mod tests {
         ReadingPosition { index, fraction, progress: 0.1 * index as f64, finished: false }
     }
 
+    /// Open the book where it was left, read for three minutes, turn to `to`.
+    fn read(library: &Library, book: &str, to: ReadingPosition) {
+        let from = library.position(book.into()).unwrap_or(at(0, 0.0));
+        library.set_position(book.into(), from);
+        library.age_session(180);
+        library.set_position(book.into(), to);
+    }
+
     #[test]
     fn progress_is_shared_between_devices() {
         let dir = temp_dir("shared");
@@ -461,16 +571,24 @@ mod tests {
         assert!(mac.shares_progress() && phone.shares_progress());
         let books = mac.scan();
 
+        read(&mac, "a.epub", at(1, 0.5));
+        // No flush needed: a page turn is shared at once...
+        assert!(phone.reload_progress());
+        assert!(!phone.reload_progress(), "nothing new the second time");
+        assert_eq!(phone.position("a.epub".into()), Some(at(1, 0.5)));
+        // ...and a burst of quick turns is completed by the next exchange.
+        mac.set_position("a.epub".into(), at(1, 0.6));
+        mac.set_position("a.epub".into(), at(1, 0.7));
         mac.set_position("a.epub".into(), at(1, 0.5));
-        mac.flush();
+        mac.reload_progress();
         phone.reload_progress();
         assert_eq!(phone.position("a.epub".into()), Some(at(1, 0.5)));
 
         // Reading on, on the phone, wins on the Mac: last reader wins.
         std::thread::sleep(Duration::from_millis(5));
-        phone.set_position("a.epub".into(), at(2, 0.25));
+        read(&phone, "a.epub", at(2, 0.25));
         std::thread::sleep(Duration::from_millis(5));
-        phone.set_position("b.epub".into(), at(1, 0.0));
+        read(&phone, "b.epub", at(1, 0.0));
         phone.flush();
         mac.reload_progress();
         assert_eq!(mac.position("a.epub".into()), Some(at(2, 0.25)));
@@ -481,9 +599,13 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.iter().all(|f| f.starts_with("reading-") && f.ends_with(".json")));
 
-        // Most recent first; opened-but-unread and finished books are left out.
+        // Most recent first. A book that was only opened, or leafed through
+        // in seconds, is left out; so is a finished one.
         std::thread::sleep(Duration::from_millis(5));
         mac.set_position("c.epub".into(), at(0, 0.0));
+        mac.set_position("c.epub".into(), at(1, 0.2));
+        mac.set_position("c.epub".into(), at(3, 0.8));
+        mac.flush();
         let ids = |l: &Library| l.continue_reading(books.clone(), 10).into_iter().map(|b| b.id).collect::<Vec<_>>();
         assert_eq!(ids(&mac), ["b.epub", "a.epub"]);
         assert_eq!(mac.continue_reading(books.clone(), 1).len(), 1);
@@ -500,10 +622,32 @@ mod tests {
         phone.set_position("a.epub".into(), at(2, 0.5));
         assert_eq!(ids(&phone), ["a.epub"]);
 
-        // Garbage left in the shared directory is ignored.
+        // Leafing does not count, but coming back and reading does; the time
+        // on the last page is counted when the book is closed.
+        mac.set_position("c.epub".into(), at(3, 0.8));
+        mac.age_session(150);
+        mac.flush();
+        assert_eq!(ids(&mac), ["c.epub"]);
+
+        // Entries from before times were recorded tie; both devices then
+        // agree on the one further into the book.
+        let legacy = |progress: f64| Entry { index: 4, fraction: 0.0, progress, finished: false, dismissed: false, updated: 0, seconds_read: None };
+        mac.lock().own.insert("old.epub".into(), legacy(0.3));
+        phone.lock().own.insert("old.epub".into(), legacy(0.4));
+        mac.lock().unshared = true;
+        phone.lock().unshared = true;
+        mac.flush();
+        phone.flush();
+        mac.reload_progress();
+        phone.reload_progress();
+        assert_eq!(mac.position("old.epub".into()).unwrap().progress, 0.4);
+        assert_eq!(phone.position("old.epub".into()).unwrap().progress, 0.4);
+
+        // Garbage left in the shared directory is ignored, and the reading
+        // time counted on the Mac reaches the phone.
         fs::write(folder.join(SHARED_DIR).join("reading-evil.json"), b"{not json").unwrap();
         phone.reload_progress();
-        assert_eq!(ids(&phone), ["a.epub"]);
+        assert_eq!(ids(&phone), ["a.epub", "c.epub"]);
         fs::remove_dir_all(dir).ok();
     }
 
@@ -519,8 +663,17 @@ mod tests {
         assert!(!library.shares_progress());
         library.set_position("a.epub".into(), at(1, 0.5));
         library.flush();
-        let again = Library::new(folder.to_string_lossy().into_owned(), state).unwrap();
+        let again = Library::new(folder.to_string_lossy().into_owned(), state.clone()).unwrap();
         assert_eq!(again.position("a.epub".into()), Some(at(1, 0.5)));
+        assert!(!again.shares_progress());
+
+        // Once the folder becomes writable, what was read meanwhile is
+        // published as soon as the folder is opened.
+        fs::remove_file(folder.join(SHARED_DIR)).unwrap();
+        let writable = Library::new(folder.to_string_lossy().into_owned(), state).unwrap();
+        assert!(writable.shares_progress());
+        let other = Library::new(folder.to_string_lossy().into_owned(), dir.join("other").to_string_lossy().into_owned()).unwrap();
+        assert_eq!(other.position("a.epub".into()), Some(at(1, 0.5)));
         fs::remove_dir_all(dir).ok();
     }
 }

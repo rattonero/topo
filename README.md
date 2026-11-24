@@ -68,7 +68,8 @@ hidden directory `.rattonero`. Each device writes only its own file,
 entry wins. Since no two devices write the same file, a file synchroniser
 never sees a conflict. If the folder is read-only, progress stays on the
 device. `Library::continue_reading` turns this into the "Continue reading"
-shelf: books started and not finished, most recently read first.
+shelf: books read for a couple of minutes (not merely opened or leafed
+through) and not finished, most recently read first.
 
 ## Safety
 

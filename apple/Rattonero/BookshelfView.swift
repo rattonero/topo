@@ -32,15 +32,20 @@ struct BookshelfView: View {
             if book == nil { store.shareProgress() }
         }
         .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .active: Task { await store.reloadProgress() }
-            case .background: store.shareProgress()
-            default: break
+            if phase == .background { store.shareProgress() }
+        }
+        .task(id: scenePhase) {
+            // While the app is in front, keep following the other devices.
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await store.reloadProgress()
+                try? await Task.sleep(for: .seconds(3))
             }
         }
         .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { store.chooseFolder(url) }
         }
+        .fileDialogDefaultDirectory(store.folderURL)
         .alert("Could not open the folder", isPresented: .constant(store.errorMessage != nil)) {
             Button("OK") { store.errorMessage = nil }
         } message: {
@@ -109,6 +114,9 @@ struct BookshelfView: View {
                 .refreshable { await store.refresh() }
             }
             .background(Color.shelfWall)
+            .safeAreaInset(edge: .bottom) {
+                if !store.sharesProgress { notSharingNotice }
+            }
         }
     }
 
@@ -119,6 +127,26 @@ struct BookshelfView: View {
             shelf.books.enumerated().map { ShelfPlace(book: $1, label: $0 == 0 ? shelf.label : nil) }
         }
         return stride(from: 0, to: places.count, by: columns).map { Array(places[$0..<min($0 + columns, places.count)]) }
+    }
+
+    /// Shown when the folder can be read but not written, so this device's
+    /// reading progress cannot reach the others. Choosing the folder again
+    /// grants the missing permission.
+    private var notSharingNotice: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+            Text("Reading progress on this device is not reaching your other devices.")
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button("Allow…") { choosingFolder = true }
+                .help("Choose the library folder again to let Rattonero Books save reading progress in it")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private func continuePlaces(columns: Int) -> [ShelfPlace] {

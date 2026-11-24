@@ -39,6 +39,7 @@ final class LibraryStore {
     }
 
     private var books: [BookInfo] = []
+    @ObservationIgnored private var isReloadingProgress = false
     private var scopedURL: URL?
 
     private enum Keys {
@@ -60,8 +61,10 @@ final class LibraryStore {
     func refresh() async {
         guard let library, !isScanning else { return }
         isScanning = true
+        let folder = folderURL
         let found = await Task.detached(priority: .userInitiated) {
-            library.reloadProgress()
+            Self.fetchSharedProgress(in: folder)
+            _ = library.reloadProgress()
             return library.scan()
         }.value
         // The folder may have been switched while the scan ran.
@@ -88,11 +91,32 @@ final class LibraryStore {
         progressChanged()
     }
 
-    /// Pick up what other devices have read since we last looked.
+    /// Pick up what other devices have read since we last looked. Called
+    /// every few seconds while the app is in front, so another device's page
+    /// turns show up here without doing anything.
     func reloadProgress() async {
-        guard let library else { return }
-        await Task.detached { library.reloadProgress() }.value
-        if library === self.library { progressChanged() }
+        guard let library, !isReloadingProgress else { return }
+        isReloadingProgress = true
+        defer { isReloadingProgress = false }
+        let folder = folderURL
+        let changed = await Task.detached(priority: .utility) {
+            Self.fetchSharedProgress(in: folder)
+            return library.reloadProgress()
+        }.value
+        if changed, library === self.library { progressChanged() }
+    }
+
+    /// Ask the file provider (iCloud Drive and the like) to bring the other
+    /// devices' progress files up to date; they are not always downloaded
+    /// by themselves, least of all on iOS.
+    nonisolated private static func fetchSharedProgress(in folder: URL?) {
+        guard let directory = folder?.appendingPathComponent(".rattonero", isDirectory: true) else { return }
+        var error: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: directory, options: .withoutChanges, error: &error) { _ in }
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in files {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: file)
+        }
     }
 
     func dismissFromContinueReading(_ book: BookInfo) {
